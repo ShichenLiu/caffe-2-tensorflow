@@ -1,5 +1,6 @@
 # From Caffe to Tensorflow
 This is an instruction on how to transfer caffe project to tensorflow. If you are not familiar with tensorflow or don't understand what is going on, please refer to [Tensorflow Section](http://???)
+**Under construction, not finished yet**
 
 ## Basic knowledge
 Let me clarify some principles at first. If you have an existing project implemented on Caffe, and you want to try something new on Tensorflow, where you hope Tensorflow to behave exactly the same as Caffe, then you can keep reading. Remember, when you meet any problem and have to debug, you should diminish all randomizations which I will explain as below one by one. Notice that some of the scripts are found in stackoverflow. Finally an example will be given to you.
@@ -28,7 +29,8 @@ If you have to debug, here are something you need to notice:
 2. mirror: at train phase, each image might have 0.5 possibility to be left-right flipped. Modify mirror option in the prototxt.
 3. random crop: even though each image have already been resized to 256x256, it will further be cropped to 227x227. One way is to use a monocolor image that is identical to crop, the other is to modify data_transform.cpp.
 4. pretrain model: use a pretrain model that can cover all variables.
-5. after above, there should be no more randomization in your debugging.
+5. drop out:
+6. after above, there should be no more randomization in your debugging.
 
 ## Convolutional
 There are two ways of padding in Tensorflow

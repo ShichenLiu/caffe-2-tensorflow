@@ -23,6 +23,44 @@ out = array[0]
 np.save('imagenet_mean.npy', out)
 ```
 
+Then you can load images with following codes
+
+```python
+def preprocess_img(self, img, batch_size, train_phase, oversample=False):
+    '''
+    pre-process input image:
+    Args:
+        img: 4-D tensor
+        batch_size: Int 
+        train_phase: Bool
+    Return:
+        distorted_img: 4-D tensor
+    '''
+    reshaped_image = tf.cast(img, tf.float32)
+    mean = tf.constant(np.load(self.mean_file), dtype=tf.float32, shape=[1, 256, 256, 3])
+    reshaped_image -= mean
+    crop_height = IMAGE_SIZE
+    crop_width = IMAGE_SIZE
+    if train_phase:
+        distorted_img = tf.pack([tf.random_crop(tf.image.random_flip_left_right(each_image), [crop_height, crop_width, 3]) for each_image in tf.unpack(reshaped_image)])
+    else:
+        if oversample:
+            distorted_img1 = tf.pack([tf.image.crop_to_bounding_box(tf.image.flip_left_right(each_image), 0, 0, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img2 = tf.pack([tf.image.crop_to_bounding_box(tf.image.flip_left_right(each_image), 28, 28, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img3 = tf.pack([tf.image.crop_to_bounding_box(tf.image.flip_left_right(each_image), 28, 0, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img4 = tf.pack([tf.image.crop_to_bounding_box(tf.image.flip_left_right(each_image), 0, 28, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img5 = tf.pack([tf.image.crop_to_bounding_box(tf.image.flip_left_right(each_image), 14, 14, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img6 = tf.pack([tf.image.crop_to_bounding_box(each_image, 0, 0, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img7 = tf.pack([tf.image.crop_to_bounding_box(each_image, 28, 28, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img8 = tf.pack([tf.image.crop_to_bounding_box(each_image, 28, 0, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img9 = tf.pack([tf.image.crop_to_bounding_box(each_image, 0, 28, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+            distorted_img0 = tf.pack([tf.image.crop_to_bounding_box(each_image, 14, 14, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])            
+            distorted_img = tf.concat(0, [distorted_img1, distorted_img2, distorted_img3, distorted_img4, distorted_img5, distorted_img6, distorted_img7, distorted_img8, distorted_img9, distorted_img0])
+        else:
+            distorted_img = tf.pack([tf.image.crop_to_bounding_box(each_image, 14, 14, crop_height, crop_width) for each_image in tf.unpack(reshaped_image)])
+    return distorted_img
+```
+
 If you have to debug, here are something you need to notice:
 
 1. random shuffle: each epoch caffe would random shuffle all data. Modify shuffle option in the prototxt.
@@ -42,6 +80,44 @@ e.g. Conv1 layer in Alexnet is VALID padding, while others are SAME padding as w
 
 ## Optimizer Strategy
 
-## Validation
+There are only one formula given by tensorflow, however you can make your own optimizer strategy with it.
+e.g.
+```python
+### Step
+self.lr = tf.train.exponential_decay(self.learning_rate, self.global_step, self.decay_step, self.decay_factor)
+### Inv
+self.lr = tf.train.exponential_decay(self.learning_rate, -0.75, 1.0, 1.0+0.002*tf.cast(self.global_step, tf.float32))
+```
 
-## Debugging
+## Train & Validation
+
+You can extract features using Alexnet and then classify like this
+```python
+source_img = tf.placeholder(tf.float32, 
+    [batch_size, 256, 256, 3])
+test_img = tf.placeholder(tf.float32, 
+    [1, 256, 256, 3])
+source_label = tf.placeholder(tf.float32, 
+    [batch_size, n_class])
+test_label = tf.placeholder(tf.float32, 
+    [1, n_class])
+global_step = tf.Variable(0, trainable=False)
+### Construct CNN
+cnn = Alexnet(model_weights)
+### Construct train net
+source_img = preprocess_img(source_img, batch_size, True)
+with tf.variable_scope("cnn"):
+    source_feature = cnn.extract(source_img)
+lr_mult = cnn.lr_mult
+with tf.variable_scope("classifier"):
+    source_fc8 = classifier(source_feature)
+### Construct test net
+log('setup', 'Construct Test Net')
+test_img = preprocess_img(test_img, 1, False)
+with tf.variable_scope("cnn", reuse=True):
+    test_feature = cnn.extract(test_img, train_phase=False)
+with tf.variable_scope("classifier", reuse=True):
+    test_fc8 = classifier(test_feature)
+test_output = tf.reduce_mean(test_fc8, 0)
+test_result = tf.equal(tf.argmax(test_output, 0), tf.argmax(test_label, 1))
+```
